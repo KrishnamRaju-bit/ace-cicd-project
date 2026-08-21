@@ -1,20 +1,24 @@
-# ACE CI/CD Project
+# \# ACE CI/CD Project
 
-IBM App Connect Enterprise CI/CD automation project.
+# 
 
-## Current Setup
+# This project is a local IBM App Connect Enterprise CI/CD automation lab.
 
-- VS Code
-- Git
-- GitHub
-- GitHub Copilot
+# 
 
-## Future Plan
+# \## Objectives
 
-- IBM App Connect Enterprise
-- ACE application development
-- BAR build
-- Jenkins CI/CD
-- Local deployment
-- Docker
-- OpenShift
+# 
+
+# \- Develop a sample IBM ACE application
+
+# \- Manage source code using Git and GitHub
+
+# \- Build ACE BAR files
+
+# \- Automate CI/CD using Jenkins
+
+# \- Deploy and test the application locally
+
+# \- Later extend the pipeline to Docker/OpenShift
+
