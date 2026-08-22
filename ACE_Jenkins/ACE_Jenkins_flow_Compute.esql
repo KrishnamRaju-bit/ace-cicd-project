@@ -1,0 +1,9 @@
+
+
+CREATE COMPUTE MODULE ACE_Jenkins_flow_Compute
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        SET OutputRoot.JSON.Data.message = 'Hello from ACE Jenkins CI/CD';
+        RETURN TRUE;
+    END;
+END MODULE;
