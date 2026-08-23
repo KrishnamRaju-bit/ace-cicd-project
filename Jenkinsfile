@@ -1,18 +1,29 @@
 pipeline {
     agent any
 
+    environment {
+        ACE_HOME   = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
+        ACE_HOST   = 'localhost'
+        ACE_PORT   = '7600'
+        BAR_NAME   = 'ACE_Jenkins.bar'
+        ACE_PROJECT = 'ACE_Jenkins'
+    }
+
     stages {
 
         stage('Test Pipeline') {
             steps {
-                echo 'ACE CI/CD Pipeline Started Successfully'
+                echo '================================'
+                echo 'ACE CI/CD Pipeline Started'
+                echo '================================'
             }
         }
 
         stage('Check ACE Environment') {
             steps {
                 bat '''
-                call "C:\\Program Files\\IBM\\ACE\\13.0.8.0\\server\\bin\\mqsiprofile.cmd"
+                call "%ACE_HOME%\\server\\bin\\mqsiprofile.cmd"
+
                 echo ACE Environment Loaded
                 where ibmint
                 ibmint --version
@@ -20,21 +31,79 @@ pipeline {
             }
         }
 
-        stage('Build BAR') {
+        stage('Build BAR and Analyze Errors') {
             steps {
-                bat '''
-                call "C:\\Program Files\\IBM\\ACE\\13.0.8.0\\server\\bin\\mqsiprofile.cmd"
+                script {
 
-                if not exist build mkdir build
+                    bat '''
+                    if not exist build mkdir build
+                    if exist "build\\build.log" del "build\\build.log"
+                    '''
 
-                ibmint package ^
-                  --input-path "%WORKSPACE%" ^
-                  --output-bar-file "%WORKSPACE%\\build\\ACE_Jenkins.bar" ^
-                  --project ACE_Jenkins
+                    def buildStatus = bat(
+                        returnStatus: true,
+                        script: '''
+                        call "%ACE_HOME%\\server\\bin\\mqsiprofile.cmd"
 
-                echo BAR Build Completed
-                dir "%WORKSPACE%\\build"
-                '''
+                        ibmint package ^
+                          --input-path "%WORKSPACE%" ^
+                          --output-bar-file "%WORKSPACE%\\build\\%BAR_NAME%" ^
+                          --project %ACE_PROJECT% ^
+                          > "%WORKSPACE%\\build\\build.log" 2>&1
+
+                        exit /b %ERRORLEVEL%
+                        '''
+                    )
+
+                    echo '================================'
+                    echo 'ACE BAR BUILD LOG'
+                    echo '================================'
+
+                    bat '''
+                    type "%WORKSPACE%\\build\\build.log"
+                    '''
+
+                    if (buildStatus != 0) {
+
+                        def buildLog = readFile(
+                            file: "${env.WORKSPACE}\\build\\build.log"
+                        )
+
+                        echo '================================'
+                        echo 'ACE BAR BUILD FAILED'
+                        echo 'AUTOMATIC ERROR ANALYSIS'
+                        echo '================================'
+
+                        printBipMessages(buildLog)
+
+                        if (buildLog.toLowerCase().contains('project') ||
+                            buildLog.toLowerCase().contains('compile')) {
+
+                            echo 'ERROR CATEGORY : ACE Build / Compilation Error'
+                            echo 'POSSIBLE REASON : ACE project contains build or compilation errors.'
+                            echo 'CHECK : Message Flow, ESQL and project resources.'
+                            echo 'CHECK : Project name and workspace structure.'
+                            echo 'SUGGESTED FIX : Resolve the first BIP error reported in build.log.'
+
+                        } else {
+
+                            echo 'ERROR CATEGORY : Unknown ACE Build Error'
+                            echo 'SUGGESTED FIX : Review BIP messages in build.log.'
+                        }
+
+                        error('ACE BAR build failed. Automatic error analysis completed.')
+
+                    } else {
+
+                        echo '================================'
+                        echo 'ACE BAR BUILD SUCCESSFUL'
+                        echo '================================'
+
+                        bat '''
+                        dir "%WORKSPACE%\\build\\%BAR_NAME%"
+                        '''
+                    }
+                }
             }
         }
 
@@ -42,15 +111,19 @@ pipeline {
             steps {
                 script {
 
+                    bat '''
+                    if exist "build\\deploy.log" del "build\\deploy.log"
+                    '''
+
                     def deployStatus = bat(
                         returnStatus: true,
                         script: '''
-                        call "C:\\Program Files\\IBM\\ACE\\13.0.8.0\\server\\bin\\mqsiprofile.cmd"
+                        call "%ACE_HOME%\\server\\bin\\mqsiprofile.cmd"
 
                         ibmint deploy ^
-                          --input-bar-file "%WORKSPACE%\\build\\ACE_Jenkins.bar" ^
-                          --output-host localhost ^
-                          --output-port 7600 ^
+                          --input-bar-file "%WORKSPACE%\\build\\%BAR_NAME%" ^
+                          --output-host %ACE_HOST% ^
+                          --output-port %ACE_PORT% ^
                           --https ^
                           --insecure ^
                           > "%WORKSPACE%\\build\\deploy.log" 2>&1
@@ -59,61 +132,82 @@ pipeline {
                         '''
                     )
 
+                    echo '================================'
+                    echo 'ACE DEPLOYMENT LOG'
+                    echo '================================'
+
                     bat '''
-                    echo.
-                    echo ================================
-                    echo ACE DEPLOYMENT LOG
-                    echo ================================
                     type "%WORKSPACE%\\build\\deploy.log"
                     '''
 
                     if (deployStatus != 0) {
 
-                        echo '================================'
-                        echo 'ACE DEPLOYMENT FAILED'
-                        echo 'Starting Automatic Error Analysis'
-                        echo '================================'
-
-                        bat '''
-                        echo.
-                        echo Detected BIP Messages:
-                        findstr /R "BIP[0-9][0-9]*[A-Z]:" "%WORKSPACE%\\build\\deploy.log"
-                        exit /b 0
-                        '''
-
-                        def connectivityError = bat(
-                            returnStatus: true,
-                            script: '''
-                            findstr /C:"BIP1921S" /C:"BIP8032E" "%WORKSPACE%\\build\\deploy.log" >nul
-                            '''
+                        def deployLog = readFile(
+                            file: "${env.WORKSPACE}\\build\\deploy.log"
                         )
 
-                        if (connectivityError == 0) {
+                        echo '================================'
+                        echo 'ACE DEPLOYMENT FAILED'
+                        echo 'STARTING AUTOMATIC ERROR ANALYSIS'
+                        echo '================================'
+
+                        printBipMessages(deployLog)
+
+                        /*
+                         * 1. CONNECTIVITY / ADMIN REST
+                         */
+                        if (deployLog.contains('BIP1921S') ||
+                            deployLog.contains('BIP8032E') ||
+                            deployLog.toLowerCase().contains('connection refused')) {
 
                             echo 'ERROR CATEGORY : ACE Connectivity / Admin REST Error'
+                            echo "TARGET HOST    : ${env.ACE_HOST}"
+                            echo "TARGET PORT    : ${env.ACE_PORT}"
                             echo 'POSSIBLE REASON : Integration Server cannot be reached.'
                             echo 'CHECK : Integration Server is running.'
-                            echo 'CHECK : Host and Admin REST port are correct.'
-                            echo 'CHECK : HTTP/HTTPS protocol matches ACE Admin SSL configuration.'
-                            echo 'SUGGESTED FIX : Verify server status, port 7600 and Admin SSL settings.'
+                            echo "CHECK : Admin REST port ${env.ACE_PORT} is listening."
+                            echo 'CHECK : Host name/IP address is correct.'
+                            echo 'CHECK : Jenkins machine can access the server.'
+                            echo "SUGGESTED FIX : Verify ${env.ACE_HOST}:${env.ACE_PORT} and Integration Server status."
 
+                        /*
+                         * 2. SSL / HTTPS
+                         */
+                        } else if (deployLog.contains('BIP3165E') ||
+                                   deployLog.toLowerCase().contains('ssl') ||
+                                   deployLog.toLowerCase().contains('certificate')) {
+
+                            echo 'ERROR CATEGORY : ACE SSL / HTTPS Error'
+                            echo "TARGET HOST    : ${env.ACE_HOST}"
+                            echo "TARGET PORT    : ${env.ACE_PORT}"
+                            echo 'POSSIBLE REASON : Admin SSL protocol or certificate problem.'
+                            echo 'CHECK : ACE Admin SSL is enabled/disabled as expected.'
+                            echo 'CHECK : HTTPS configuration matches Integration Server settings.'
+                            echo 'CHECK : Certificate validity and trust.'
+                            echo 'SUGGESTED FIX : Verify admin SSL settings and certificate configuration.'
+
+                        /*
+                         * 3. DEPLOYMENT / ACE PROCESSING
+                         */
+                        } else if (deployLog.contains('BIP8081E') ||
+                                   deployLog.toLowerCase().contains('deploy') ||
+                                   deployLog.toLowerCase().contains('application')) {
+
+                            echo 'ERROR CATEGORY : ACE Application Deployment / Command Processing Error'
+                            echo 'POSSIBLE REASON : ACE rejected or failed to process the BAR deployment.'
+                            echo 'CHECK : BAR file contents.'
+                            echo 'CHECK : Application dependencies and configuration.'
+                            echo 'CHECK : Earlier BIP error messages for the actual root cause.'
+                            echo 'SUGGESTED FIX : Resolve the first specific BIP error before BIP8081E.'
+
+                        /*
+                         * 4. UNKNOWN
+                         */
                         } else {
 
-                            def processingError = bat(
-                                returnStatus: true,
-                                script: '''
-                                findstr /C:"BIP8081E" "%WORKSPACE%\\build\\deploy.log" >nul
-                                '''
-                            )
-
-                            if (processingError == 0) {
-                                echo 'ERROR CATEGORY : ACE Command Processing Error'
-                                echo 'POSSIBLE REASON : ibmint deploy command failed.'
-                                echo 'SUGGESTED FIX : Check the BIP messages printed before BIP8081E for the root cause.'
-                            } else {
-                                echo 'ERROR CATEGORY : Unknown ACE Deployment Error'
-                                echo 'SUGGESTED FIX : Review detected BIP messages in deploy.log.'
-                            }
+                            echo 'ERROR CATEGORY : Unknown ACE Deployment Error'
+                            echo 'POSSIBLE REASON : Error does not match a known automation rule.'
+                            echo 'SUGGESTED FIX : Review detected BIP messages in deploy.log.'
                         }
 
                         error('ACE BAR deployment failed. Automatic error analysis completed.')
@@ -122,6 +216,7 @@ pipeline {
 
                         echo '================================'
                         echo 'ACE BAR DEPLOYMENT SUCCESSFUL'
+                        echo "SERVER : ${env.ACE_HOST}:${env.ACE_PORT}"
                         echo '================================'
                     }
                 }
@@ -130,9 +225,49 @@ pipeline {
     }
 
     post {
-        always {
-            archiveArtifacts artifacts: 'build/deploy.log',
-                             allowEmptyArchive: true
+
+        success {
+            echo '================================'
+            echo 'ACE CI/CD PIPELINE SUCCESS'
+            echo '================================'
         }
+
+        failure {
+            echo '================================'
+            echo 'ACE CI/CD PIPELINE FAILED'
+            echo 'CHECK AUTOMATIC ERROR ANALYSIS ABOVE'
+            echo '================================'
+        }
+
+        always {
+            archiveArtifacts(
+                artifacts: 'build/*.log,build/*.bar',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}
+
+/*
+ * Extract and print all BIP messages from ACE logs
+ */
+def printBipMessages(String logText) {
+
+    echo 'Detected BIP Messages:'
+
+    def bipMessages = []
+
+    logText.eachLine { line ->
+        if (line ==~ /.*BIP[0-9]+[A-Z]:.*/) {
+            bipMessages.add(line.trim())
+        }
+    }
+
+    if (bipMessages.size() > 0) {
+        bipMessages.each { message ->
+            echo message
+        }
+    } else {
+        echo 'No BIP error code detected.'
     }
 }
