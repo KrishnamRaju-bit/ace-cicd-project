@@ -23,7 +23,6 @@ pipeline {
             steps {
                 bat '''
                 call "%ACE_HOME%\\server\\bin\\mqsiprofile.cmd"
-
                 echo ACE Environment Loaded
                 where ibmint
                 ibmint --version
@@ -75,6 +74,7 @@ pipeline {
                         echo '================================'
 
                         printBipMessages(buildLog)
+                        analyzeBipKnowledgeBase(buildLog)
 
                         if (buildLog.toLowerCase().contains('project') ||
                             buildLog.toLowerCase().contains('compile')) {
@@ -152,6 +152,12 @@ pipeline {
                         echo '================================'
 
                         printBipMessages(deployLog)
+
+                        echo '================================'
+                        echo 'BIP KNOWLEDGE BASE ANALYSIS'
+                        echo '================================'
+
+                        analyzeBipKnowledgeBase(deployLog)
 
                         if (deployLog.contains('BIP1921S') ||
                             deployLog.contains('BIP8032E') ||
@@ -253,8 +259,7 @@ pipeline {
 
 
 /*
- * Print detected ACE BIP messages
- * CPS-safe version
+ * Print all ACE BIP messages
  */
 def printBipMessages(String logText) {
 
@@ -280,4 +285,74 @@ def printBipMessages(String logText) {
     }
 
     echo '================================'
+}
+
+
+/*
+ * ACE BIP Knowledge Base
+ */
+def analyzeBipKnowledgeBase(String logText) {
+
+    def foundKnownError = false
+
+    if (logText.contains('BIP1921S')) {
+
+        foundKnownError = true
+
+        echo '--------------------------------'
+        echo 'BIP CODE : BIP1921S'
+        echo 'TYPE     : Server Connectivity'
+        echo 'MEANING  : ACE Integration Server cannot be reached.'
+        echo 'CAUSE    : Server stopped, incorrect host/port, or protocol mismatch.'
+        echo 'ACTION   : Check Integration Server status and Admin REST connection.'
+        echo '--------------------------------'
+    }
+
+    if (logText.contains('BIP3165E')) {
+
+        foundKnownError = true
+
+        echo '--------------------------------'
+        echo 'BIP CODE : BIP3165E'
+        echo 'TYPE     : SSL / Socket Communication'
+        echo 'MEANING  : An SSL socket operation failed.'
+        echo 'CAUSE    : Connection refused, SSL configuration, or certificate issue.'
+        echo 'ACTION   : Verify port, HTTPS setting, Admin SSL and certificate.'
+        echo '--------------------------------'
+    }
+
+    if (logText.contains('BIP8032E')) {
+
+        foundKnownError = true
+
+        echo '--------------------------------'
+        echo 'BIP CODE : BIP8032E'
+        echo 'TYPE     : Administration Connection'
+        echo 'MEANING  : Unable to connect to ACE Integration Server or Integration Node.'
+        echo 'CAUSE    : Admin REST endpoint is unavailable or connection details are incorrect.'
+        echo 'ACTION   : Verify host, Admin REST port, server status and protocol.'
+        echo '--------------------------------'
+    }
+
+    if (logText.contains('BIP8081E')) {
+
+        foundKnownError = true
+
+        echo '--------------------------------'
+        echo 'BIP CODE : BIP8081E'
+        echo 'TYPE     : Command Processing'
+        echo 'MEANING  : ACE command processing failed.'
+        echo 'CAUSE    : Usually a higher-level error caused by an earlier BIP message.'
+        echo 'ACTION   : Find and resolve the first specific BIP error before BIP8081E.'
+        echo '--------------------------------'
+    }
+
+    if (!foundKnownError) {
+
+        echo '--------------------------------'
+        echo 'KNOWLEDGE BASE RESULT'
+        echo 'No known BIP mapping found.'
+        echo 'ACTION : Review the detected BIP messages and extend the knowledge base.'
+        echo '--------------------------------'
+    }
 }
