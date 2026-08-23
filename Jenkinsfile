@@ -2,10 +2,10 @@ pipeline {
     agent any
 
     environment {
-        ACE_HOME   = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
-        ACE_HOST   = 'localhost'
-        ACE_PORT   = '7600'
-        BAR_NAME   = 'ACE_Jenkins.bar'
+        ACE_HOME    = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
+        ACE_HOST    = 'localhost'
+        ACE_PORT    = '7600'
+        BAR_NAME    = 'ACE_Jenkins.bar'
         ACE_PROJECT = 'ACE_Jenkins'
     }
 
@@ -81,8 +81,8 @@ pipeline {
 
                             echo 'ERROR CATEGORY : ACE Build / Compilation Error'
                             echo 'POSSIBLE REASON : ACE project contains build or compilation errors.'
-                            echo 'CHECK : Message Flow, ESQL and project resources.'
-                            echo 'CHECK : Project name and workspace structure.'
+                            echo 'CHECK 1 : Message Flow, ESQL and project resources.'
+                            echo 'CHECK 2 : Project name and workspace structure.'
                             echo 'SUGGESTED FIX : Resolve the first BIP error reported in build.log.'
 
                         } else {
@@ -153,59 +153,62 @@ pipeline {
 
                         printBipMessages(deployLog)
 
-                        /*
-                         * 1. CONNECTIVITY / ADMIN REST
-                         */
                         if (deployLog.contains('BIP1921S') ||
                             deployLog.contains('BIP8032E') ||
                             deployLog.toLowerCase().contains('connection refused')) {
 
+                            echo '================================'
                             echo 'ERROR CATEGORY : ACE Connectivity / Admin REST Error'
                             echo "TARGET HOST    : ${env.ACE_HOST}"
                             echo "TARGET PORT    : ${env.ACE_PORT}"
+                            echo '================================'
+
                             echo 'POSSIBLE REASON : Integration Server cannot be reached.'
-                            echo 'CHECK : Integration Server is running.'
-                            echo "CHECK : Admin REST port ${env.ACE_PORT} is listening."
-                            echo 'CHECK : Host name/IP address is correct.'
-                            echo 'CHECK : Jenkins machine can access the server.'
+                            echo 'CHECK 1 : Integration Server is running.'
+                            echo "CHECK 2 : Admin REST port ${env.ACE_PORT} is listening."
+                            echo 'CHECK 3 : Host name or IP address is correct.'
+                            echo 'CHECK 4 : Jenkins machine can access the ACE server.'
+                            echo 'CHECK 5 : HTTP/HTTPS matches ACE Admin SSL configuration.'
                             echo "SUGGESTED FIX : Verify ${env.ACE_HOST}:${env.ACE_PORT} and Integration Server status."
 
-                        /*
-                         * 2. SSL / HTTPS
-                         */
                         } else if (deployLog.contains('BIP3165E') ||
                                    deployLog.toLowerCase().contains('ssl') ||
                                    deployLog.toLowerCase().contains('certificate')) {
 
+                            echo '================================'
                             echo 'ERROR CATEGORY : ACE SSL / HTTPS Error'
                             echo "TARGET HOST    : ${env.ACE_HOST}"
                             echo "TARGET PORT    : ${env.ACE_PORT}"
-                            echo 'POSSIBLE REASON : Admin SSL protocol or certificate problem.'
-                            echo 'CHECK : ACE Admin SSL is enabled/disabled as expected.'
-                            echo 'CHECK : HTTPS configuration matches Integration Server settings.'
-                            echo 'CHECK : Certificate validity and trust.'
-                            echo 'SUGGESTED FIX : Verify admin SSL settings and certificate configuration.'
+                            echo '================================'
 
-                        /*
-                         * 3. DEPLOYMENT / ACE PROCESSING
-                         */
+                            echo 'POSSIBLE REASON : Admin SSL protocol or certificate problem.'
+                            echo 'CHECK 1 : ACE Admin SSL configuration.'
+                            echo 'CHECK 2 : HTTPS is enabled when required.'
+                            echo 'CHECK 3 : Certificate validity.'
+                            echo 'CHECK 4 : Certificate trust configuration.'
+                            echo 'SUGGESTED FIX : Verify Admin SSL and certificate configuration.'
+
                         } else if (deployLog.contains('BIP8081E') ||
                                    deployLog.toLowerCase().contains('deploy') ||
                                    deployLog.toLowerCase().contains('application')) {
 
-                            echo 'ERROR CATEGORY : ACE Application Deployment / Command Processing Error'
-                            echo 'POSSIBLE REASON : ACE rejected or failed to process the BAR deployment.'
-                            echo 'CHECK : BAR file contents.'
-                            echo 'CHECK : Application dependencies and configuration.'
-                            echo 'CHECK : Earlier BIP error messages for the actual root cause.'
+                            echo '================================'
+                            echo 'ERROR CATEGORY : ACE Application Deployment / Processing Error'
+                            echo '================================'
+
+                            echo 'POSSIBLE REASON : ACE failed to process the BAR deployment.'
+                            echo 'CHECK 1 : BAR file contents.'
+                            echo 'CHECK 2 : Application dependencies.'
+                            echo 'CHECK 3 : Application configuration.'
+                            echo 'CHECK 4 : Earlier BIP messages for actual root cause.'
                             echo 'SUGGESTED FIX : Resolve the first specific BIP error before BIP8081E.'
 
-                        /*
-                         * 4. UNKNOWN
-                         */
                         } else {
 
+                            echo '================================'
                             echo 'ERROR CATEGORY : Unknown ACE Deployment Error'
+                            echo '================================'
+
                             echo 'POSSIBLE REASON : Error does not match a known automation rule.'
                             echo 'SUGGESTED FIX : Review detected BIP messages in deploy.log.'
                         }
@@ -248,26 +251,33 @@ pipeline {
     }
 }
 
+
 /*
- * Extract and print all BIP messages from ACE logs
+ * Print detected ACE BIP messages
+ * CPS-safe version
  */
 def printBipMessages(String logText) {
 
-    echo 'Detected BIP Messages:'
+    echo '================================'
+    echo 'DETECTED BIP MESSAGES'
+    echo '================================'
 
-    def bipMessages = []
+    def lines = logText.split('\\r?\\n')
+    def found = false
 
-    logText.eachLine { line ->
-        if (line ==~ /.*BIP[0-9]+[A-Z]:.*/) {
-            bipMessages.add(line.trim())
+    for (int i = 0; i < lines.length; i++) {
+
+        def currentLine = lines[i].trim()
+
+        if (currentLine ==~ /.*BIP[0-9]+[A-Z]:.*/) {
+            echo currentLine
+            found = true
         }
     }
 
-    if (bipMessages.size() > 0) {
-        bipMessages.each { message ->
-            echo message
-        }
-    } else {
+    if (!found) {
         echo 'No BIP error code detected.'
     }
+
+    echo '================================'
 }
