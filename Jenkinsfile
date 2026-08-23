@@ -36,5 +36,21 @@ pipeline {
                 '''
             }
         }
+
+        stage('Deploy BAR') {
+            steps {
+                bat '''
+                call "C:\\Program Files\\IBM\\ACE\\13.0.8.0\\server\\bin\\mqsiprofile.cmd"
+
+                ibmint deploy ^
+                  --input-bar-file "%WORKSPACE%\\build\\ACE_Jenkins.bar" ^
+                  --output-host localhost ^
+                  --output-port 7600 ^
+                  --no-https
+
+                echo BAR Deployment Completed
+                '''
+            }
+        }
     }
 }
