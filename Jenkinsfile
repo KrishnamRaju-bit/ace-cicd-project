@@ -50,7 +50,7 @@ pipeline {
                         ibmint deploy ^
                           --input-bar-file "%WORKSPACE%\\build\\ACE_Jenkins.bar" ^
                           --output-host localhost ^
-                          --output-port 7601 ^
+                          --output-port 7600 ^
                           --https ^
                           --insecure ^
                           > "%WORKSPACE%\\build\\deploy.log" 2>&1
