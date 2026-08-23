@@ -4,7 +4,7 @@ pipeline {
     environment {
         ACE_HOME          = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
         ACE_HOST          = 'localhost'
-        ACE_PORT          = '7601'
+        ACE_PORT          = '7600'
         EXPECTED_ACE_PORT = '7600'
         BAR_NAME          = 'ACE_Jenkins.bar'
         ACE_PROJECT       = 'ACE_Jenkins'
@@ -170,50 +170,81 @@ pipeline {
                             echo '================================'
                             echo 'ERROR CATEGORY : ACE Connectivity / Admin REST Error'
                             echo "TARGET HOST    : ${env.ACE_HOST}"
-                            echo "TARGET PORT    : ${env.ACE_PORT}"
+                            echo "CONFIGURED PORT: ${env.ACE_PORT}"
+                            echo "EXPECTED PORT  : ${env.EXPECTED_ACE_PORT}"
                             echo '================================'
 
-                            echo 'CHECK 1 : Integration Server is running.'
+                            echo 'CHECK 1 : Integration Server status'
+                            echo "SERVER NAME     : ${env.ACE_SERVER_NAME}"
+                            echo 'EXPECTED RESULT : Integration Server should be running.'
                             echo 'IF FAILED:'
                             echo "Start Integration Server '${env.ACE_SERVER_NAME}' and rerun the pipeline."
                             echo ''
 
-                            echo "CHECK 2 : Admin REST port ${env.ACE_PORT} is correct and listening."
-                            echo 'IF FAILED:'
+                            echo 'CHECK 2 : Admin REST Port Configuration'
+                            echo "CONFIGURED PORT : ${env.ACE_PORT}"
+                            echo "EXPECTED PORT   : ${env.EXPECTED_ACE_PORT}"
 
                             if (env.ACE_PORT != env.EXPECTED_ACE_PORT) {
-                                echo 'Detected configuration mismatch.'
+
+                                echo 'RESULT          : PORT MISMATCH'
+                                echo 'ROOT CAUSE      : Jenkinsfile is using an incorrect ACE Admin REST port.'
+                                echo ''
+                                echo 'EXACT FIX:'
                                 echo "FROM : ACE_PORT = '${env.ACE_PORT}'"
                                 echo "TO   : ACE_PORT = '${env.EXPECTED_ACE_PORT}'"
+                                echo ''
                                 echo 'Change the Jenkinsfile value, commit it, and rerun the pipeline.'
+
                             } else {
-                                echo "ACE_PORT is already set to ${env.ACE_PORT}."
-                                echo "Verify that port ${env.ACE_PORT} is actually listening on the ACE server."
-                                echo "Example command: netstat -ano | findstr :${env.ACE_PORT}"
+
+                                echo 'RESULT          : PORT CONFIGURATION MATCHES'
+                                echo "Verify that port ${env.EXPECTED_ACE_PORT} is actually listening."
+                                echo "COMMAND : netstat -ano | findstr :${env.EXPECTED_ACE_PORT}"
                             }
 
                             echo ''
 
-                            echo 'CHECK 3 : Host name or IP address is correct.'
-                            echo 'IF FAILED:'
-                            echo 'Change ACE_HOST in Jenkinsfile to the real ACE server host name or IP address.'
-                            echo "Current value : ACE_HOST = '${env.ACE_HOST}'"
-                            echo "For this local lab, expected value is: ACE_HOST = 'localhost'"
+                            echo 'CHECK 3 : ACE Host Configuration'
+                            echo "CONFIGURED HOST : ${env.ACE_HOST}"
+                            echo "EXPECTED HOST   : localhost"
+
+                            if (env.ACE_HOST != 'localhost') {
+
+                                echo 'RESULT          : HOST CONFIGURATION NEEDS VERIFICATION'
+                                echo 'IF THIS ACE SERVER IS LOCAL:'
+                                echo ''
+                                echo 'EXACT FIX:'
+                                echo "FROM : ACE_HOST = '${env.ACE_HOST}'"
+                                echo "TO   : ACE_HOST = 'localhost'"
+                                echo ''
+                                echo 'If ACE is on another machine, replace ACE_HOST with the actual ACE server hostname or IP.'
+
+                            } else {
+
+                                echo 'RESULT          : HOST CONFIGURATION MATCHES LOCAL ACE SERVER'
+                            }
+
                             echo ''
 
-                            echo 'CHECK 4 : Jenkins machine can access the ACE server.'
+                            echo 'CHECK 4 : Jenkins to ACE Network Connectivity'
+                            echo "CONNECTIVITY TARGET : ${env.ACE_HOST}:${env.EXPECTED_ACE_PORT}"
+                            echo 'EXPECTED RESULT     : Jenkins machine should reach the ACE Admin REST endpoint.'
                             echo 'IF FAILED:'
                             echo 'Verify network connectivity, DNS/IP resolution and firewall rules.'
-                            echo "Allow Jenkins machine to connect to ${env.ACE_HOST}:${env.ACE_PORT}."
-                            echo 'For a remote ACE server, confirm the Admin REST port is open between Jenkins and ACE.'
+                            echo "Verify Jenkins can access ${env.ACE_HOST}:${env.EXPECTED_ACE_PORT}."
+                            echo "Ensure TCP port ${env.EXPECTED_ACE_PORT} is allowed between Jenkins and ACE."
                             echo ''
 
-                            echo 'CHECK 5 : HTTP/HTTPS matches ACE Admin SSL configuration.'
+                            echo 'CHECK 5 : ACE Admin REST Protocol / SSL'
+                            echo 'EXPECTED CONFIGURATION : HTTPS because ACE Admin SSL is enabled.'
+                            echo 'JENKINS DEPLOY OPTION  : --https'
                             echo 'IF FAILED:'
-                            echo 'If ACE Admin SSL is enabled, use --https.'
-                            echo 'If ACE Admin SSL is disabled, use --no-https.'
-                            echo 'If certificate validation fails, trust the ACE admin certificate.'
-                            echo 'Use --insecure only for local/test environments.'
+                            echo 'Run: ibmint display admin-ssl'
+                            echo 'If Admin SSL is enabled  -> Jenkins deployment must use --https.'
+                            echo 'If Admin SSL is disabled -> Jenkins deployment must use --no-https.'
+                            echo 'If HTTPS certificate validation fails -> trust the ACE Admin SSL certificate.'
+                            echo 'Use --insecure only for this local/test setup.'
                             echo ''
 
                             echo '================================'
@@ -221,10 +252,17 @@ pipeline {
                             echo '================================'
 
                             if (env.ACE_PORT != env.EXPECTED_ACE_PORT) {
+
+                                echo 'ISSUE       : ADMIN REST PORT MISMATCH'
+                                echo "CONFIGURED  : ${env.ACE_PORT}"
+                                echo "EXPECTED    : ${env.EXPECTED_ACE_PORT}"
                                 echo "PRIMARY FIX : Change ACE_PORT from '${env.ACE_PORT}' to '${env.EXPECTED_ACE_PORT}'."
+
                             } else {
-                                echo 'PRIMARY FIX : Port value matches expected configuration.'
-                                echo 'Next verify server status, listening port, host reachability and HTTPS settings.'
+
+                                echo 'PORT CHECK  : CONFIGURED PORT MATCHES EXPECTED PORT'
+                                echo "PORT        : ${env.EXPECTED_ACE_PORT}"
+                                echo 'NEXT ACTION : Verify server status, host connectivity and HTTPS configuration.'
                             }
 
                         } else if (deployLog.contains('BIP3165E') ||
