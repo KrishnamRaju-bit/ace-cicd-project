@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         ACE_HOME          = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
-        ACE_HOST          = 'wronghost'
+        ACE_HOST          = 'localhost'
         ACE_PORT          = '7600'
         EXPECTED_ACE_PORT = '7600'
         BAR_NAME          = 'ACE_Jenkins.bar'
@@ -165,13 +165,14 @@ pipeline {
 
                         if (deployLog.contains('BIP1921S') ||
                             deployLog.contains('BIP8032E') ||
-                            deployLog.toLowerCase().contains('connection refused')) {
+                            deployLog.toLowerCase().contains('connection refused') ||
+                            deployLog.toLowerCase().contains('unknownhostexception')) {
 
                             echo '================================'
                             echo 'ERROR CATEGORY : ACE Connectivity / Admin REST Error'
-                            echo "TARGET HOST    : ${env.ACE_HOST}"
-                            echo "CONFIGURED PORT: ${env.ACE_PORT}"
-                            echo "EXPECTED PORT  : ${env.EXPECTED_ACE_PORT}"
+                            echo "TARGET HOST     : ${env.ACE_HOST}"
+                            echo "CONFIGURED PORT : ${env.ACE_PORT}"
+                            echo "EXPECTED PORT   : ${env.EXPECTED_ACE_PORT}"
                             echo '================================'
 
                             echo 'CHECK 1 : Integration Server status'
@@ -207,18 +208,18 @@ pipeline {
 
                             echo 'CHECK 3 : ACE Host Configuration'
                             echo "CONFIGURED HOST : ${env.ACE_HOST}"
-                            echo "EXPECTED HOST   : localhost"
+                            echo 'EXPECTED HOST   : localhost'
 
                             if (env.ACE_HOST != 'localhost') {
 
-                                echo 'RESULT          : HOST CONFIGURATION NEEDS VERIFICATION'
-                                echo 'IF THIS ACE SERVER IS LOCAL:'
+                                echo 'RESULT          : HOST MISMATCH'
+                                echo 'ROOT CAUSE      : Jenkinsfile is using an incorrect ACE host value.'
                                 echo ''
                                 echo 'EXACT FIX:'
                                 echo "FROM : ACE_HOST = '${env.ACE_HOST}'"
                                 echo "TO   : ACE_HOST = 'localhost'"
                                 echo ''
-                                echo 'If ACE is on another machine, replace ACE_HOST with the actual ACE server hostname or IP.'
+                                echo 'If ACE is on another machine, replace localhost with the real ACE hostname or IP.'
 
                             } else {
 
@@ -228,11 +229,11 @@ pipeline {
                             echo ''
 
                             echo 'CHECK 4 : Jenkins to ACE Network Connectivity'
-                            echo "CONNECTIVITY TARGET : ${env.ACE_HOST}:${env.EXPECTED_ACE_PORT}"
+                            echo "CONNECTIVITY TARGET : localhost:${env.EXPECTED_ACE_PORT}"
                             echo 'EXPECTED RESULT     : Jenkins machine should reach the ACE Admin REST endpoint.'
                             echo 'IF FAILED:'
                             echo 'Verify network connectivity, DNS/IP resolution and firewall rules.'
-                            echo "Verify Jenkins can access ${env.ACE_HOST}:${env.EXPECTED_ACE_PORT}."
+                            echo "Verify Jenkins can access localhost:${env.EXPECTED_ACE_PORT}."
                             echo "Ensure TCP port ${env.EXPECTED_ACE_PORT} is allowed between Jenkins and ACE."
                             echo ''
 
@@ -258,11 +259,27 @@ pipeline {
                                 echo "EXPECTED    : ${env.EXPECTED_ACE_PORT}"
                                 echo "PRIMARY FIX : Change ACE_PORT from '${env.ACE_PORT}' to '${env.EXPECTED_ACE_PORT}'."
 
+                            } else if (env.ACE_HOST != 'localhost') {
+
+                                echo 'ISSUE       : ACE HOST MISMATCH'
+                                echo "CONFIGURED  : ${env.ACE_HOST}"
+                                echo 'EXPECTED    : localhost'
+                                echo "PRIMARY FIX : Change ACE_HOST from '${env.ACE_HOST}' to 'localhost'."
+
+                            } else if (deployLog.contains('BIP3165E') ||
+                                       deployLog.toLowerCase().contains('ssl') ||
+                                       deployLog.toLowerCase().contains('certificate')) {
+
+                                echo 'ISSUE       : ACE SSL / HTTPS CONFIGURATION'
+                                echo 'EXPECTED    : HTTPS because ACE Admin SSL is enabled.'
+                                echo 'PRIMARY FIX : Verify Jenkins uses --https and validate/trust the ACE Admin SSL certificate.'
+
                             } else {
 
-                                echo 'PORT CHECK  : CONFIGURED PORT MATCHES EXPECTED PORT'
+                                echo 'ISSUE       : ACE CONNECTIVITY FAILURE'
                                 echo "PORT        : ${env.EXPECTED_ACE_PORT}"
-                                echo 'NEXT ACTION : Verify server status, host connectivity and HTTPS configuration.'
+                                echo "HOST        : ${env.ACE_HOST}"
+                                echo 'PRIMARY FIX : Verify Integration Server status, network connectivity and Admin REST accessibility.'
                             }
 
                         } else if (deployLog.contains('BIP3165E') ||
