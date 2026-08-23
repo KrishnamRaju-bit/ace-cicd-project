@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         ACE_HOME          = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
-        ACE_HOST          = 'localhost'
+        ACE_HOST          = 'wronghost'
         ACE_PORT          = '7600'
         EXPECTED_ACE_PORT = '7600'
         BAR_NAME          = 'ACE_Jenkins.bar'
