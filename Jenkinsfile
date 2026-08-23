@@ -2,11 +2,13 @@ pipeline {
     agent any
 
     environment {
-        ACE_HOME    = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
-        ACE_HOST    = 'localhost'
-        ACE_PORT    = '7601'
-        BAR_NAME    = 'ACE_Jenkins.bar'
-        ACE_PROJECT = 'ACE_Jenkins'
+        ACE_HOME          = 'C:\\Program Files\\IBM\\ACE\\13.0.8.0'
+        ACE_HOST          = 'localhost'
+        ACE_PORT          = '7600'
+        EXPECTED_ACE_PORT = '7600'
+        BAR_NAME          = 'ACE_Jenkins.bar'
+        ACE_PROJECT       = 'ACE_Jenkins'
+        ACE_SERVER_NAME   = 'ACE_Jenkins_Server'
     }
 
     stages {
@@ -82,7 +84,9 @@ pipeline {
                             echo 'ERROR CATEGORY : ACE Build / Compilation Error'
                             echo 'POSSIBLE REASON : ACE project contains build or compilation errors.'
                             echo 'CHECK 1 : Message Flow, ESQL and project resources.'
+                            echo 'FIX     : Correct the flow/ESQL compile error shown in build.log.'
                             echo 'CHECK 2 : Project name and workspace structure.'
+                            echo "FIX     : Verify ACE_PROJECT = '${env.ACE_PROJECT}' and repository folder structure."
                             echo 'SUGGESTED FIX : Resolve the first BIP error reported in build.log.'
 
                         } else {
@@ -169,13 +173,59 @@ pipeline {
                             echo "TARGET PORT    : ${env.ACE_PORT}"
                             echo '================================'
 
-                            echo 'POSSIBLE REASON : Integration Server cannot be reached.'
                             echo 'CHECK 1 : Integration Server is running.'
-                            echo "CHECK 2 : Admin REST port ${env.ACE_PORT} is listening."
+                            echo 'IF FAILED:'
+                            echo "Start Integration Server '${env.ACE_SERVER_NAME}' and rerun the pipeline."
+                            echo ''
+
+                            echo "CHECK 2 : Admin REST port ${env.ACE_PORT} is correct and listening."
+                            echo 'IF FAILED:'
+
+                            if (env.ACE_PORT != env.EXPECTED_ACE_PORT) {
+                                echo 'Detected configuration mismatch.'
+                                echo "FROM : ACE_PORT = '${env.ACE_PORT}'"
+                                echo "TO   : ACE_PORT = '${env.EXPECTED_ACE_PORT}'"
+                                echo 'Change the Jenkinsfile value, commit it, and rerun the pipeline.'
+                            } else {
+                                echo "ACE_PORT is already set to ${env.ACE_PORT}."
+                                echo "Verify that port ${env.ACE_PORT} is actually listening on the ACE server."
+                                echo "Example command: netstat -ano | findstr :${env.ACE_PORT}"
+                            }
+
+                            echo ''
+
                             echo 'CHECK 3 : Host name or IP address is correct.'
+                            echo 'IF FAILED:'
+                            echo 'Change ACE_HOST in Jenkinsfile to the real ACE server host name or IP address.'
+                            echo "Current value : ACE_HOST = '${env.ACE_HOST}'"
+                            echo "For this local lab, expected value is: ACE_HOST = 'localhost'"
+                            echo ''
+
                             echo 'CHECK 4 : Jenkins machine can access the ACE server.'
+                            echo 'IF FAILED:'
+                            echo 'Verify network connectivity, DNS/IP resolution and firewall rules.'
+                            echo "Allow Jenkins machine to connect to ${env.ACE_HOST}:${env.ACE_PORT}."
+                            echo 'For a remote ACE server, confirm the Admin REST port is open between Jenkins and ACE.'
+                            echo ''
+
                             echo 'CHECK 5 : HTTP/HTTPS matches ACE Admin SSL configuration.'
-                            echo "SUGGESTED FIX : Verify ${env.ACE_HOST}:${env.ACE_PORT} and Integration Server status."
+                            echo 'IF FAILED:'
+                            echo 'If ACE Admin SSL is enabled, use --https.'
+                            echo 'If ACE Admin SSL is disabled, use --no-https.'
+                            echo 'If certificate validation fails, trust the ACE admin certificate.'
+                            echo 'Use --insecure only for local/test environments.'
+                            echo ''
+
+                            echo '================================'
+                            echo 'EXACT REMEDIATION SUMMARY'
+                            echo '================================'
+
+                            if (env.ACE_PORT != env.EXPECTED_ACE_PORT) {
+                                echo "PRIMARY FIX : Change ACE_PORT from '${env.ACE_PORT}' to '${env.EXPECTED_ACE_PORT}'."
+                            } else {
+                                echo 'PRIMARY FIX : Port value matches expected configuration.'
+                                echo 'Next verify server status, listening port, host reachability and HTTPS settings.'
+                            }
 
                         } else if (deployLog.contains('BIP3165E') ||
                                    deployLog.toLowerCase().contains('ssl') ||
@@ -187,12 +237,24 @@ pipeline {
                             echo "TARGET PORT    : ${env.ACE_PORT}"
                             echo '================================'
 
-                            echo 'POSSIBLE REASON : Admin SSL protocol or certificate problem.'
-                            echo 'CHECK 1 : ACE Admin SSL configuration.'
-                            echo 'CHECK 2 : HTTPS is enabled when required.'
-                            echo 'CHECK 3 : Certificate validity.'
-                            echo 'CHECK 4 : Certificate trust configuration.'
-                            echo 'SUGGESTED FIX : Verify Admin SSL and certificate configuration.'
+                            echo 'CHECK 1 : ACE Admin SSL setting.'
+                            echo 'IF FAILED:'
+                            echo 'Run: ibmint display admin-ssl'
+                            echo ''
+
+                            echo 'CHECK 2 : Jenkins deploy protocol.'
+                            echo 'IF FAILED:'
+                            echo 'Admin SSL enabled  -> use --https'
+                            echo 'Admin SSL disabled -> use --no-https'
+                            echo ''
+
+                            echo 'CHECK 3 : Certificate trust.'
+                            echo 'IF FAILED:'
+                            echo 'Import/trust the ACE admin SSL certificate on the Jenkins machine.'
+                            echo 'For this local lab, --insecure can be used temporarily.'
+                            echo ''
+
+                            echo 'SUGGESTED FIX : Align Jenkins deploy protocol with ACE Admin SSL configuration.'
 
                         } else if (deployLog.contains('BIP8081E') ||
                                    deployLog.toLowerCase().contains('deploy') ||
@@ -202,12 +264,27 @@ pipeline {
                             echo 'ERROR CATEGORY : ACE Application Deployment / Processing Error'
                             echo '================================'
 
-                            echo 'POSSIBLE REASON : ACE failed to process the BAR deployment.'
                             echo 'CHECK 1 : BAR file contents.'
+                            echo 'IF FAILED:'
+                            echo 'Rebuild the BAR and verify required application resources are included.'
+                            echo ''
+
                             echo 'CHECK 2 : Application dependencies.'
+                            echo 'IF FAILED:'
+                            echo 'Add or fix missing libraries, policies, schemas or referenced resources.'
+                            echo ''
+
                             echo 'CHECK 3 : Application configuration.'
-                            echo 'CHECK 4 : Earlier BIP messages for actual root cause.'
-                            echo 'SUGGESTED FIX : Resolve the first specific BIP error before BIP8081E.'
+                            echo 'IF FAILED:'
+                            echo 'Correct deployment overrides or environment-specific configuration.'
+                            echo ''
+
+                            echo 'CHECK 4 : Earlier BIP messages.'
+                            echo 'IF FAILED:'
+                            echo 'Fix the first specific BIP error before BIP8081E.'
+                            echo ''
+
+                            echo 'SUGGESTED FIX : Resolve the earliest concrete BIP error in deploy.log.'
 
                         } else {
 
@@ -216,7 +293,7 @@ pipeline {
                             echo '================================'
 
                             echo 'POSSIBLE REASON : Error does not match a known automation rule.'
-                            echo 'SUGGESTED FIX : Review detected BIP messages in deploy.log.'
+                            echo 'SUGGESTED FIX : Review detected BIP messages in deploy.log and extend the knowledge base.'
                         }
 
                         error('ACE BAR deployment failed. Automatic error analysis completed.')
@@ -304,7 +381,7 @@ def analyzeBipKnowledgeBase(String logText) {
         echo 'TYPE     : Server Connectivity'
         echo 'MEANING  : ACE Integration Server cannot be reached.'
         echo 'CAUSE    : Server stopped, incorrect host/port, or protocol mismatch.'
-        echo 'ACTION   : Check Integration Server status and Admin REST connection.'
+        echo 'ACTION   : Check server status, host, Admin REST port and protocol.'
         echo '--------------------------------'
     }
 
