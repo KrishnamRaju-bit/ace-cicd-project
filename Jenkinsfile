@@ -46,7 +46,8 @@ pipeline {
                   --input-bar-file "%WORKSPACE%\\build\\ACE_Jenkins.bar" ^
                   --output-host localhost ^
                   --output-port 7600 ^
-                  --no-https
+                  --https ^
+                  --insecure
 
                 echo BAR Deployment Completed
                 '''
